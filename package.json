@@ -1,0 +1,38 @@
+{
+	"name": "vedshare",
+	"version": "1.0.0",
+	"description": "",
+	"main": "backend/server.js",
+	"scripts": {
+		"dev": "nodemon backend/server.js",
+		"start": "node backend/server.js",
+		"build": "npm install && npm install --prefix frontend && npm run build --prefix frontend"
+	},
+	"keywords": [],
+	"author": "",
+	"type": "module",
+	"license": "ISC",
+	"dependencies": {
+		"@google/generative-ai": "^0.24.1",
+		"bcryptjs": "^2.4.3",
+		"cloudinary": "^2.4.0",
+		"cookie-parser": "^1.4.6",
+		"cors": "^2.8.5",
+		"debug": "^4.4.1",
+		"dotenv": "^16.4.5",
+		"express": "^4.19.2",
+		"express-rate-limit": "^8.2.1",
+		"firebase-admin": "^13.6.0",
+		"ioredis": "^5.4.1",
+		"jsonwebtoken": "^9.0.2",
+		"mammoth": "^1.11.0",
+		"mongoose": "^8.5.3",
+		"multer": "^2.0.2",
+		"node-mailjet": "^6.0.8",
+		"pdf2json": "^3.2.2",
+		"stripe": "^16.8.0"
+	},
+	"devDependencies": {
+		"nodemon": "^3.1.4"
+	}
+}
