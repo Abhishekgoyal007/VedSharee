@@ -1,3 +1,19 @@
+# Dependencies
+node_modules
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+.env.production
+.env.*.local
+frontend/.env
+frontend/.env.local
+
+# Build output
+dist
+dist-ssr
+*.local
+
 # Logs
 logs
 *.log
@@ -6,16 +22,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-.env
-
-/frontend/.npm-cache/
-
-node_modules
-dist
-dist-ssr
-*.local
-
 
 # Editor directories and files
 .vscode/*
@@ -27,3 +33,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS files
+Thumbs.db
+
+# Cache
+/frontend/.npm-cache/
+.vercel
+
+# Uploads (not needed in git since Vercel is read-only)
+backend/uploads/*
+!backend/uploads/.gitkeep

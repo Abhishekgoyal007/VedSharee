@@ -19,7 +19,6 @@ import interviewRoutes from "./routes/interview.route.js";
 import documentRoutes from "./routes/document.route.js";
 import focusRoutes from "./routes/focus.route.js";
 
-
 import { connectDB } from "./lib/db.js";
 
 const app = express();
@@ -36,30 +35,33 @@ const allowedOrigins = [
 	"http://127.0.0.1:5174",
 	"http://127.0.0.1:3000",
 	process.env.CLIENT_URL,
-	/\.vercel\.app$/,  // Allow all Vercel preview URLs
-];
+].filter(Boolean);
 
 app.use(cors({
 	origin: function (origin, callback) {
-		// Allow requests with no origin (like mobile apps or curl)
+		// Allow requests with no origin (mobile apps, curl, same-origin)
 		if (!origin) return callback(null, true);
 
-		// Check if origin is allowed
-		const isAllowed = allowedOrigins.some(allowed => {
-			if (allowed instanceof RegExp) return allowed.test(origin);
-			return allowed === origin;
-		});
-
-		if (isAllowed) {
-			callback(null, true);
-		} else {
-			callback(null, true); // Allow all in production for now
+		// Check against allowed list
+		if (allowedOrigins.includes(origin)) {
+			return callback(null, true);
 		}
+
+		// Allow all Vercel preview deployments
+		if (/\.vercel\.app$/.test(origin)) {
+			return callback(null, true);
+		}
+
+		// Reject unknown origins in production
+		callback(new Error("Not allowed by CORS"));
 	},
-	credentials: true
+	credentials: true,
 }));
 
-app.use(express.json({ limit: "10mb" })); // allows you to parse the body of the request
+// Trust proxy for Vercel (required for rate limiting & secure cookies behind reverse proxy)
+app.set("trust proxy", 1);
+
+app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
@@ -75,10 +77,12 @@ app.use('/api/interview', interviewRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/focus', focusRoutes);
 
-
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+	res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 if (process.env.NODE_ENV === "production") {
-	// __dirname is the root of the project in ES modules with path.resolve()
 	app.use(express.static(path.join(__dirname, "frontend", "dist")));
 
 	app.get("*", (req, res) => {
@@ -86,7 +90,12 @@ if (process.env.NODE_ENV === "production") {
 	});
 }
 
-app.listen(PORT, () => {
-	console.log("Server is running on http://localhost:" + PORT);
-	connectDB();
+// Connect to DB before starting server
+connectDB().then(() => {
+	app.listen(PORT, () => {
+		console.log("Server is running on http://localhost:" + PORT);
+	});
 });
+
+// Export for Vercel serverless
+export default app;

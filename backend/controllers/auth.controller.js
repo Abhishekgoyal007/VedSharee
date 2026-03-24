@@ -22,16 +22,19 @@ const storeRefreshToken = async (userId, refreshToken) => {
 };
 
 const setCookies = (res, accessToken, refreshToken) => {
+	const isProduction = process.env.NODE_ENV === "production";
+	const cookieOptions = {
+		httpOnly: true,
+		secure: isProduction,
+		sameSite: isProduction ? "none" : "lax",
+	};
+
 	res.cookie("accessToken", accessToken, {
-		httpOnly: true, // prevent XSS attacks, cross site scripting attack
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
+		...cookieOptions,
 		maxAge: 15 * 60 * 1000, // 15 minutes
 	});
 	res.cookie("refreshToken", refreshToken, {
-		httpOnly: true, // prevent XSS attacks, cross site scripting attack
-		secure: process.env.NODE_ENV === "production",
-		sameSite: "strict", // prevents CSRF attack, cross-site request forgery attack
+		...cookieOptions,
 		maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 	});
 };
@@ -193,10 +196,11 @@ export const refreshToken = async (req, res) => {
 
 		const accessToken = jwt.sign({ userId: decoded.userId }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "15m" });
 
+		const isProduction = process.env.NODE_ENV === "production";
 		res.cookie("accessToken", accessToken, {
 			httpOnly: true,
-			secure: process.env.NODE_ENV === "production",
-			sameSite: "strict",
+			secure: isProduction,
+			sameSite: isProduction ? "none" : "lax",
 			maxAge: 15 * 60 * 1000,
 		});
 
@@ -229,9 +233,7 @@ export const forgotPassword = async (req, res) => {
 
 		// Generate and save token
 		const { plainToken, hashedToken } = await generateResetToken();
-		console.log("plain token:", plainToken)
 		user.resetPasswordToken = hashedToken;
-		console.log("hashed token: ", hashedToken);
 		user.resetPasswordExpiresAt = Date.now() + 3600000; // 1 hour
 		await user.save();
 
@@ -248,8 +250,6 @@ export const forgotPassword = async (req, res) => {
 // Reset Password
 export const resetPassword = async (req, res) => {
 	const { token } = req.params;
-	console.log("Received token:", token);
-	console.log("Request body:", req.body);
 	const { newPassword } = req.body;
 
 	try {
@@ -258,8 +258,6 @@ export const resetPassword = async (req, res) => {
 			resetPasswordToken: { $exists: true },
 			resetPasswordExpiresAt: { $gt: Date.now() }
 		});
-
-		console.log("Found candidates:", candidates.length);
 
 		// Compare each user's hashed token
 		let matchedUser = null;
@@ -270,9 +268,6 @@ export const resetPassword = async (req, res) => {
 				break;
 			}
 		}
-
-		console.log("Matched user:", matchedUser);
-		console.log("hashedToken", matchedUser.resetPasswordToken);
 
 
 		// Step 3: If no user matched

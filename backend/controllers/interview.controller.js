@@ -5,9 +5,6 @@ export const generateQuestions = async (req, res) => {
     try {
         const { title, description, context } = req.body;
 
-        console.log("Generating questions for:", title);
-        console.log("API Key present:", !!process.env.GEMINI_API_KEY);
-
         if (!process.env.GEMINI_API_KEY) {
             console.error("Gemini API Key is missing from environment variables");
             return res.status(500).json({ message: "Gemini API Key is missing" });
@@ -29,8 +26,6 @@ export const generateQuestions = async (req, res) => {
         const result = await model.generateContent(prompt);
         const response = await result.response;
         let text = response.text();
-
-        console.log("Raw Gemini response:", text);
 
         // Clean up potential markdown formatting if Gemini ignores the instruction
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();

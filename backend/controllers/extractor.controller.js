@@ -1,29 +1,11 @@
 import Document from "../models/document.model.js";
 import Keyword from "../models/keyword.model.js";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
 import PDFParser from "pdf2json";
 import mammoth from "mammoth";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configure multer for file upload
-const storage = multer.diskStorage({
-	destination: (req, file, cb) => {
-		const uploadPath = path.join(__dirname, "../uploads");
-		if (!fs.existsSync(uploadPath)) {
-			fs.mkdirSync(uploadPath, { recursive: true });
-		}
-		cb(null, uploadPath);
-	},
-	filename: (req, file, cb) => {
-		const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-		cb(null, uniqueSuffix + "-" + file.originalname);
-	},
-});
+// Configure multer for MEMORY storage (required for Vercel serverless — no filesystem access)
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
 	const allowedTypes = [
@@ -49,19 +31,16 @@ export const upload = multer({
 	},
 });
 
-// Simple keyword extraction function (you can enhance this with better NLP)
+// Simple keyword extraction function
 const extractKeywords = (text) => {
-	// Remove special characters and convert to lowercase
 	const cleanText = text
 		.toLowerCase()
 		.replace(/[^\w\s]/g, " ")
 		.replace(/\s+/g, " ")
 		.trim();
 
-	// Split into words
 	const words = cleanText.split(" ");
 
-	// Common stop words to filter out
 	const stopWords = new Set([
 		"a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he",
 		"in", "is", "it", "its", "of", "on", "that", "the", "to", "was", "will", "with",
@@ -78,7 +57,6 @@ const extractKeywords = (text) => {
 		"best", "better", "day", "today", "tomorrow", "yesterday", "week", "month", "year"
 	]);
 
-	// Count word frequencies and filter out stop words and short words
 	const wordCount = {};
 	words.forEach(word => {
 		if (word.length > 3 && !stopWords.has(word) && !word.match(/^\d+$/)) {
@@ -86,10 +64,9 @@ const extractKeywords = (text) => {
 		}
 	});
 
-	// Sort by frequency and take top keywords
 	const sortedKeywords = Object.entries(wordCount)
 		.sort((a, b) => b[1] - a[1])
-		.slice(0, 50) // Take top 50 keywords
+		.slice(0, 50)
 		.map(([word, frequency]) => ({
 			text: word,
 			frequency,
@@ -99,20 +76,19 @@ const extractKeywords = (text) => {
 	return sortedKeywords;
 };
 
-// Extract text from different file types
-const extractTextFromFile = async (filePath, fileType) => {
+// Extract text from buffer (no filesystem dependency)
+const extractTextFromBuffer = async (buffer, fileType) => {
 	try {
 		let text = "";
 
 		if (fileType === "application/pdf") {
-			// Extract text from PDF using pdf2json
 			text = await new Promise((resolve, reject) => {
 				const pdfParser = new PDFParser();
-				
+
 				pdfParser.on("pdfParser_dataError", errData => {
 					reject(new Error(errData.parserError));
 				});
-				
+
 				pdfParser.on("pdfParser_dataReady", pdfData => {
 					let extractedText = "";
 					if (pdfData.Pages) {
@@ -132,21 +108,19 @@ const extractTextFromFile = async (filePath, fileType) => {
 					}
 					resolve(extractedText);
 				});
-				
-				pdfParser.loadPDF(filePath);
+
+				pdfParser.parseBuffer(buffer);
 			});
 		} else if (
 			fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
 			fileType === "application/msword"
 		) {
-			// Extract text from Word document using mammoth
-			const result = await mammoth.extractRawText({ path: filePath });
+			const result = await mammoth.extractRawText({ buffer });
 			text = result.value;
 		} else if (
 			fileType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
 			fileType === "application/vnd.ms-powerpoint"
 		) {
-			// For PowerPoint, extract basic text (placeholder implementation)
 			text = "PowerPoint document uploaded. Text extraction from PowerPoint files is currently limited. Please try uploading a PDF or Word document for better keyword extraction.";
 		}
 
@@ -159,41 +133,34 @@ const extractTextFromFile = async (filePath, fileType) => {
 
 export const uploadDocument = async (req, res) => {
 	try {
-		console.log("Keyword extractor upload called");
-		console.log("User:", req.user);
-		console.log("File:", req.file);
-		
 		if (!req.file) {
 			return res.status(400).json({ message: "No file uploaded" });
 		}
 
 		const userId = req.user._id;
-		const { originalname, mimetype, size, path: filePath, filename } = req.file;
+		const { originalname, mimetype, size, buffer } = req.file;
 
-		// Extract text from the uploaded file
+		// Extract text from buffer
 		let extractedText;
 		try {
-			extractedText = await extractTextFromFile(filePath, mimetype);
-			console.log("Extracted text length:", extractedText.length);
+			extractedText = await extractTextFromBuffer(buffer, mimetype);
 		} catch (textExtractionError) {
 			console.error("Text extraction error:", textExtractionError);
-			return res.status(400).json({ 
+			return res.status(400).json({
 				message: "Failed to extract text from document. Please ensure the file is not corrupted.",
-				error: textExtractionError.message
 			});
 		}
-		
+
 		// Extract keywords from the text
 		const keywordsData = extractKeywords(extractedText);
-		console.log("Extracted keywords count:", keywordsData.length);
 
-		// Save document to database
+		// Save document to database (no filePath — serverless has no filesystem)
 		const document = new Document({
-			filename,
+			filename: `${Date.now()}-${originalname}`,
 			originalName: originalname,
 			fileType: mimetype,
 			fileSize: size,
-			filePath,
+			filePath: "memory", // No persistent file path on serverless
 			userId,
 		});
 
@@ -225,18 +192,14 @@ export const uploadDocument = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error uploading document:", error);
-		res.status(500).json({ 
+		res.status(500).json({
 			message: "Failed to upload document and extract keywords",
-			error: error.message 
 		});
 	}
 };
 
 export const getUserDocuments = async (req, res) => {
 	try {
-		console.log("Get user documents for keyword extractor called");
-		console.log("User:", req.user);
-		
 		const userId = req.user._id;
 		const documents = await Document.find({ userId })
 			.populate("keywords")
@@ -261,9 +224,9 @@ export const getDocumentWithKeywords = async (req, res) => {
 			return res.status(404).json({ message: "Document not found" });
 		}
 
-		res.status(200).json({ 
+		res.status(200).json({
 			document,
-			keywords: document.keywords 
+			keywords: document.keywords
 		});
 	} catch (error) {
 		console.error("Error fetching document:", error);
@@ -331,7 +294,7 @@ export const addKeyword = async (req, res) => {
 
 		const keyword = new Keyword({
 			text,
-			confidence: 100, // User-added keywords have full confidence
+			confidence: 100,
 			frequency: 1,
 			documentId,
 			userId,
@@ -365,12 +328,7 @@ export const deleteDocument = async (req, res) => {
 		// Delete associated keywords
 		await Keyword.deleteMany({ documentId });
 
-		// Delete file from filesystem
-		if (fs.existsSync(document.filePath)) {
-			fs.unlinkSync(document.filePath);
-		}
-
-		// Delete document from database
+		// Delete document from database (no filesystem cleanup needed)
 		await Document.deleteOne({ _id: documentId });
 
 		res.status(200).json({ message: "Document deleted successfully" });

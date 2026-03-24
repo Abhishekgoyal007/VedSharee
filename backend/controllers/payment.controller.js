@@ -78,7 +78,6 @@ export const checkoutSuccess = async (req, res) => {
 	try {
 		const { sessionId } = req.body;
 		const session = await stripe.checkout.sessions.retrieve(sessionId);
-		console.log("Checkout Session Retrieved:", session.id, "Status:", session.payment_status);
 
 		if (session.payment_status === "paid") {
 			// Check if order already exists to prevent duplicates (Idempotency)
